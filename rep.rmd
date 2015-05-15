@@ -1,0 +1,89 @@
+
+# Reproducible Research: Assignment 1
+## Loading and preprocessing the data
+
+During this step I load the data and delete incomplete rows.
+``` {r echo = TRUE}
+activity <- read.csv("./activity.csv")
+activity_without_na <- activity[complete.cases(activity),]
+```
+
+##Calculating the mean total number of steps taken per day
+During this step i use dlyr package to calculate sums of steps for each day.
+
+``` {r echo = TRUE}
+library(plyr)
+steps_per_day <- ddply(activity_without_na, .(date), summarise, steps=sum(steps))
+hist(steps_per_day$steps, xlab = "steps", main = "Histogram of the total number of steps taken each day")
+mn <-  mean(steps_per_day$steps)
+md <- median(steps_per_day$steps)
+```
+I found that the mean is `r mn` and the median is `r md`
+
+##Finding the average daily activity pattern
+During this step i use dlyr package to calculate the mean number of steps for each time in day averaged across all days.
+
+``` {r echo = TRUE}
+steps_each_time <- ddply(activity_without_na, .(interval), summarize, steps=mean(steps))
+plot(steps_each_time, type ="l")
+title("The average number of steps during a day")
+interval_number <- steps_each_time[which(steps_each_time$steps == max(steps_each_time$steps)),1]
+```
+The interval number of maximum number of paces is `r interval_number` 
+
+##Imputing missing values
+Now I calculate total number of rows with missing data and fill missing data values with average value of paces for that 5 min interval
+
+```{r echo = TRUE}
+library(ggplot2)
+number_of_na_rows <- nrow(activity) - nrow(activity_without_na)
+filled_activity <- data.frame()
+
+for (i in 1:nrow(activity)){
+    if (is.na(activity[i, 1])) {
+        temp <- cbind(subset(steps_each_time, interval == activity[i, 3])[2], activity[i, 2], activity[i, 3])
+        colnames(temp) <- c("steps", "date", "interval")
+        filled_activity <- rbind(filled_activity, temp)
+    } 
+    else {
+        filled_activity <- rbind(filled_activity, activity[i,])
+    }
+}
+
+steps_per_day_after_filling_na <- ddply(filled_activity, .(date), summarise, steps=sum(steps))
+steps_per_day_after_filling_na$type <- "after adding means"
+steps_per_day$type <- "before adding means"
+two_hists <- rbind(steps_per_day, steps_per_day_after_filling_na)
+ggplot(two_hists, aes(steps, fill = type)) + geom_histogram(alpha = 0.5, aes(y = ..density..), position = 'identity', binwidth = 5000)
+mn_after_filling <-  mean(steps_per_day_after_filling_na$steps)
+md_after_filling <- median(steps_per_day_after_filling_na$steps)
+```
+The total number of *NA* is `r number_of_na_rows`
+Obtained histogram shows that after adding means the part of movements in the afternoon hours is increased.
+The statistical characteristics of the distribution:
+mean is equal `r mn_after_filling`
+median is equal `r md_after_filling`
+
+
+## Investigation of the differences in activity patterns between weekdays and weekends
+
+``` {r echo = TRUE}
+weekdays_and_weekends <- cbind(filled_activity, weekdays(as.Date(as.character(filled_activity$date))))
+
+for (i in 1:nrow(weekdays_and_weekends)){
+    weekdays_and_weekends[i, 4]
+    if (as.character(weekdays_and_weekends[i, 4]) == "Saturday" || as.character(weekdays_and_weekends[i, 4]) == "Sunday") {
+        weekdays_and_weekends[i, 5] <- "weekend"
+        } 
+    else {
+        weekdays_and_weekends[i, 5] <- "weekday"
+    }
+}
+
+weekdays_and_weekends[,5] <- as.factor(weekdays_and_weekends[,5])
+steps_each_time_filled <- ddply(weekdays_and_weekends, .(interval, V5), summarize, steps=mean(steps))
+ggplot(data=steps_each_time_filled, aes(x=interval, y=steps, colour=V5)) + geom_line() + ggtitle("The average number of steps during a day")
+```
+
+This plot indicates that the person's activity is inscreased in the morning (he/she goes to work) then in is decreased in comparison with weekend which indicates that this person has a job with low physical activity.
+
